@@ -17,7 +17,52 @@ impl RbSeries {
 
 /// Convert a Series to a Numo array.
 fn series_to_numo(rb: &Ruby, s: &Series) -> RbResult<Value> {
+    if let Some(v) = series_to_numo_fast(rb, s) {
+        return Ok(v);
+    }
     series_to_numo_with_copy(rb, s)
+}
+
+/// Fast path: allocate a Numo array and copy the contiguous buffer in a single memcpy
+/// (no per-element Ruby Object boxing). Only for fixed-width numeric dtypes with no nulls
+/// and a single contiguous chunk; returns None (caller falls back) otherwise.
+fn series_to_numo_fast(rb: &Ruby, s: &Series) -> Option<Value> {
+    if s.null_count() != 0 {
+        return None;
+    }
+    use DataType::*;
+
+    // $ca: contiguous ChunkedArray, $cls: Numo class name
+    macro_rules! copy_into_numo {
+        ($ca:expr, $cls:literal) => {{
+            let sl = $ca.cont_slice().ok()?;
+            let (arr, dst) = super::new_numo_1d(rb, $cls, sl.len())?;
+            // Safety: `dst` is a freshly allocated Numo buffer of `sl.len()` elements of the
+            // same width; source and destination are non-overlapping and native-endian.
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    sl.as_ptr() as *const u8,
+                    dst,
+                    std::mem::size_of_val(sl),
+                );
+            }
+            Some(arr)
+        }};
+    }
+
+    match s.dtype() {
+        Float64 => copy_into_numo!(s.f64().ok()?, "DFloat"),
+        Float32 => copy_into_numo!(s.f32().ok()?, "SFloat"),
+        Int64 => copy_into_numo!(s.i64().ok()?, "Int64"),
+        Int32 => copy_into_numo!(s.i32().ok()?, "Int32"),
+        Int16 => copy_into_numo!(s.i16().ok()?, "Int16"),
+        Int8 => copy_into_numo!(s.i8().ok()?, "Int8"),
+        UInt64 => copy_into_numo!(s.u64().ok()?, "UInt64"),
+        UInt32 => copy_into_numo!(s.u32().ok()?, "UInt32"),
+        UInt16 => copy_into_numo!(s.u16().ok()?, "UInt16"),
+        UInt8 => copy_into_numo!(s.u8().ok()?, "UInt8"),
+        _ => None,
+    }
 }
 
 /// Convert a Series to a Numo array, copying data in the process.

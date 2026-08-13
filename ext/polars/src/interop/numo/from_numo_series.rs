@@ -1,31 +1,7 @@
-use magnus::rb_sys::AsRawValue;
 use magnus::{RString, Value, prelude::*};
 use polars::prelude::*;
-use rb_sys::StableApiDefinition;
 
 use crate::{RbResult, RbSeries, RbValueError};
-
-// --- Numo NArray の C 構造体(numo-narray-alt の narray.h と一致させる) ---
-// typedef struct RNArray { u8 ndim; u8 type; u8 flag[2]; u16 elmsz;
-//                          size_t size; size_t* shape; VALUE reduce; } narray_t;  (32B)
-// typedef struct RNArrayData { narray_t base; char* ptr; bool owned; } narray_data_t;
-#[repr(C)]
-struct NarrayT {
-    ndim: std::os::raw::c_uchar,
-    ntype: std::os::raw::c_uchar,
-    flag: [std::os::raw::c_uchar; 2],
-    elmsz: std::os::raw::c_ushort,
-    size: usize,
-    shape: *const usize,
-    reduce: rb_sys::VALUE,
-}
-#[repr(C)]
-struct NarrayDataT {
-    base: NarrayT,
-    ptr: *const u8,
-    owned: bool,
-}
-const NARRAY_DATA_T: u8 = 0x1;
 
 /// Copy `len` contiguous native-endian elements at `buf` into a polars Series.
 /// Returns None for unsupported dtypes (caller falls back).
@@ -144,24 +120,15 @@ impl RbSeries {
         let ndim: usize = numo.funcall("ndim", ())?;
         let size: usize = numo.funcall("size", ())?;
 
+        // read_data_ptr が ABI 自己検証 + 連続DATA_T判定を行う(適用不可なら None)。
         if ndim == 1 {
-            let raw = numo.as_raw();
-            let data = unsafe { rb_sys::stable_api::get_default().rtypeddata_get_data(raw) }
-                as *const NarrayDataT;
-            if !data.is_null() {
-                let nd = unsafe { &*data };
-                // ABI 自己検証 + 連続所有データ(DATA_T)判定
-                let layout_ok = nd.base.ndim as usize == ndim && nd.base.size == size;
-                if layout_ok && nd.base.ntype == NARRAY_DATA_T && !nd.ptr.is_null() {
-                    let class: Value = numo.funcall("class", ())?;
-                    let class_name: String = class.funcall("name", ())?;
-                    // Safety: DATA_T guarantees `size` contiguous native-endian elements at
-                    // `nd.ptr`, owned by the live `numo` arg; from_slice copies out.
-                    if let Some(s) =
-                        unsafe { numo_data_to_series(&class_name, &name, nd.ptr, size) }
-                    {
-                        return Ok(RbSeries::new(s));
-                    }
+            if let Some(buf) = super::read_data_ptr(numo, ndim, size) {
+                let class: Value = numo.funcall("class", ())?;
+                let class_name: String = class.funcall("name", ())?;
+                // Safety: read_data_ptr guarantees `size` contiguous native-endian elements
+                // at `buf`, owned by the live `numo` arg; from_slice copies out.
+                if let Some(s) = unsafe { numo_data_to_series(&class_name, &name, buf, size) } {
+                    return Ok(RbSeries::new(s));
                 }
             }
         }
