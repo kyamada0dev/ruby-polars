@@ -201,12 +201,21 @@ module Polars
       end
     end
 
-    def self.numo_to_rbseries(name, values, strict: true, nan_to_null: false)
-      # not needed yet
-      # if !values.contiguous?
-      # end
+    # dtypes for which the native fast path (RbSeries.from_numo_ptr) is safe:
+    # fixed-width numeric with a 1:1 polars mapping and no null concept.
+    # Matched by class name (as strings) so this file loads without Numo present.
+    FAST_NUMO_DTYPE_NAMES = %w[Numo::DFloat Numo::SFloat Numo::Int64 Numo::Int32].freeze
 
+    def self.numo_to_rbseries(name, values, strict: true, nan_to_null: false)
       if values.shape.length == 1
+        # Fast path: copy the buffer directly (no per-element Ruby Object boxing) when it
+        # is safe to do so — native byte order, a supported fixed-width dtype, and no
+        # NaN->null conversion requested. Everything else keeps the fully-generic to_a path.
+        # from_numo_ptr itself falls back to the robust to_binary path for NArray views.
+        if !nan_to_null && !values.byte_swapped? && FAST_NUMO_DTYPE_NAMES.include?(values.class.name)
+          return RbSeries.from_numo_ptr(name, values)
+        end
+
         values, dtype = numo_values_and_dtype(values)
         constructor = numo_type_to_constructor(dtype)
         constructor.(
