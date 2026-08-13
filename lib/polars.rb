@@ -7,6 +7,7 @@ end
 
 # stdlib
 require "date"
+require "json"
 require "stringio"
 
 # modules
