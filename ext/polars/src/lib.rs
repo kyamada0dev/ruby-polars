@@ -86,6 +86,7 @@ fn init(ruby: &Ruby) -> RbResult<()> {
         method!(RbDataFrame::__arrow_c_stream__, 0),
     )?;
     class.define_method("to_numo", method!(RbDataFrame::to_numo, 0))?;
+    class.define_method("lstsq", method!(RbDataFrame::lstsq, 1))?;
     class.define_method("add", method!(RbDataFrame::add, 1))?;
     class.define_method("sub", method!(RbDataFrame::sub, 1))?;
     class.define_method("div", method!(RbDataFrame::div, 1))?;

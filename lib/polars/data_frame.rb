@@ -894,6 +894,27 @@ module Polars
       end
     end
 
+    # Ordinary least squares via faer (pure Rust; no BLAS/Numo).
+    #
+    # `target` is a column of this DataFrame used as the response `y`; every other
+    # column is a predictor. The whole computation happens in Rust
+    # (Polars -> faer -> Polars), so no matrix is materialized on the Ruby side.
+    # Cast to floats and handle nulls in Polars first (they raise otherwise).
+    #
+    # @param target [String]
+    #   Name of the response column.
+    #
+    # @return [DataFrame] two columns: `feature` and `coefficient`.
+    #
+    # @example
+    #   df = Polars::DataFrame.new(
+    #     {"intercept" => [1.0, 1.0, 1.0], "x" => [1.0, 2.0, 3.0], "y" => [3.0, 5.0, 7.0]}
+    #   )
+    #   df.lstsq("y")
+    def lstsq(target)
+      _from_rbdf(_df.lstsq(target.to_s))
+    end
+
     # no to_pandas
 
     # Select column as Series at index location.

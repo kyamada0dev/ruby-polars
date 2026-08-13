@@ -15,6 +15,7 @@ crate-type = ["cdylib"]
 ahash = "0.8"
 arrow = { package = "polars-arrow", version = "=0.55.2" }
 bytes = "1"
+faer = "0.24"
 chrono = "0.4"
 chrono-tz = "0.10"
 either = "1.8"
