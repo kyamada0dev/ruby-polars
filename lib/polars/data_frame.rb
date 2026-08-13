@@ -75,6 +75,8 @@ module Polars
         self._df = Utils.sequence_to_rbdf(data, schema: schema, schema_overrides: schema_overrides, strict: strict, orient: orient, infer_schema_length: infer_schema_length)
       elsif data.is_a?(Series)
         self._df = Utils.series_to_rbdf(data, schema: schema, schema_overrides: schema_overrides, strict: strict)
+      elsif defined?(Numo::NArray) && data.is_a?(Numo::NArray)
+        self._df = self.class.from_numo(data, schema: schema, orient: orient)._df
       elsif data.respond_to?(:arrow_c_stream)
         # This uses the fact that RbSeries.from_arrow_c_stream will create a
         # struct-typed Series. Then we unpack that to a DataFrame.
@@ -128,6 +130,69 @@ module Polars
       df = DataFrame.allocate
       df._df = rb_df
       df
+    end
+
+    # Construct a DataFrame from a 1-D or 2-D Numo array.
+    #
+    # For a 2-D array of shape `[height, width]`, each of the `width` slices along
+    # axis 1 becomes a column (this round-trips with {#to_numo}). Building each
+    # column reuses the fast native Numo->Series conversion.
+    #
+    # @param data [Numo::NArray]
+    #   A 1-D or 2-D Numo array.
+    # @param schema [Object]
+    #   Column names as an Array (or the keys of a Hash). Defaults to
+    #   `column_0`, `column_1`, ...
+    # @param orient [String]
+    #   `"col"` (default) treats axis-1 slices as columns; `"row"` transposes first,
+    #   so each row of the array becomes a column.
+    #
+    # @return [DataFrame]
+    #
+    # @example
+    #   Polars::DataFrame.from_numo(Numo::DFloat[[1, 2], [3, 4]], schema: ["a", "b"])
+    #   # =>
+    #   # shape: (2, 2)
+    #   # ┌─────┬─────┐
+    #   # │ a   ┆ b   │
+    #   # │ --- ┆ --- │
+    #   # │ f64 ┆ f64 │
+    #   # ╞═════╪═════╡
+    #   # │ 1.0 ┆ 2.0 │
+    #   # │ 3.0 ┆ 4.0 │
+    #   # └─────┴─────┘
+    def self.from_numo(data, schema: nil, orient: nil)
+      require "numo/narray"
+
+      unless defined?(Numo::NArray) && data.is_a?(Numo::NArray)
+        raise ArgumentError, "expected a Numo::NArray, got #{data.class}"
+      end
+
+      columns =
+        case data.ndim
+        when 1
+          [data]
+        when 2
+          arr = orient == "row" ? data.transpose : data
+          arr.shape[1].times.map { |j| arr[true, j] }
+        else
+          raise ArgumentError, "from_numo expects a 1-D or 2-D array, got #{data.ndim}-D"
+        end
+
+      names =
+        if schema.nil?
+          columns.length.times.map { |i| "column_#{i}" }
+        else
+          keys = schema.is_a?(Hash) ? schema.keys : Array(schema)
+          keys = keys.map(&:to_s)
+          if keys.length != columns.length
+            raise ArgumentError,
+              "schema length (#{keys.length}) does not match number of columns (#{columns.length})"
+          end
+          keys
+        end
+
+      new(names.zip(columns).map { |name, col| Series.new(name, col) })
     end
 
     # Plot data.
