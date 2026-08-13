@@ -30,6 +30,12 @@ fn series_to_numo_fast(rb: &Ruby, s: &Series) -> Option<Value> {
     if s.null_count() != 0 {
         return None;
     }
+    // 未対応 dtype(String/temporal/Boolean 等)は rechunk せず即フォールバック
+    if super::numo_class_name(s.dtype()).is_none() {
+        return None;
+    }
+    // multi-chunk(read_csv 等)だと cont_slice が失敗するので rechunk(単一chunkなら no-op)
+    let s = s.rechunk();
     use DataType::*;
 
     // $ca: contiguous ChunkedArray, $cls: Numo class name
