@@ -166,6 +166,36 @@ module Polars
     puts "Index type: #{get_index_type}"
     puts "Platform: #{RUBY_PLATFORM}"
     puts "Ruby: #{RUBY_VERSION}"
+    puts
+    puts "----Optional dependencies----"
+    _optional_dependency_versions.each do |name, version|
+      puts "#{name}: #{version}"
+    end
     nil
+  end
+
+  # Optional gems Polars can integrate with, and their installed versions
+  # (or "<not installed>"). The require path and gem name can differ (e.g.
+  # numo/narray is provided by numo-narray or numo-narray-alt), so each entry
+  # lists the require path plus the gem names to look up.
+  OPTIONAL_DEPENDENCIES = [
+    ["numo/narray", %w[numo-narray-alt numo-narray]],
+    ["numo/linalg", %w[numo-linalg-alt numo-linalg]]
+  ].freeze
+  private_constant :OPTIONAL_DEPENDENCIES
+
+  # @private
+  def self._optional_dependency_versions
+    OPTIONAL_DEPENDENCIES.map do |path, gem_names|
+      version =
+        begin
+          require path
+          spec = gem_names.filter_map { |n| Gem.loaded_specs[n] }.first
+          spec ? spec.version.to_s : "loaded"
+        rescue LoadError
+          "<not installed>"
+        end
+      [path, version]
+    end
   end
 end
