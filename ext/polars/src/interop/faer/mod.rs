@@ -49,7 +49,12 @@ fn df_to_faer_f64(df: &DataFrame) -> PolarsResult<Mat<f64>> {
         .map(|s| s.f64().unwrap().cont_slice().unwrap())
         .collect();
 
-    Ok(Mat::from_fn(nrows, ncols, |i, j| slices[j][i]))
+    // faer は列-major。各 Polars 列(連続)を faer Mat の列バッファへ直 memcpy。
+    let mut m = Mat::<f64>::zeros(nrows, ncols);
+    for j in 0..ncols {
+        m.col_as_slice_mut(j).copy_from_slice(slices[j]);
+    }
+    Ok(m)
 }
 
 /// 単一の数値 Series -> faer の列ベクトル(shape [n, 1])。
@@ -59,7 +64,9 @@ fn series_to_faer_col(s: &Series) -> PolarsResult<Mat<f64>> {
         polars_bail!(ComputeError: "target column '{}' has nulls", s.name());
     }
     let sl = s.f64().unwrap().cont_slice().unwrap();
-    Ok(Mat::from_fn(sl.len(), 1, |i, _| sl[i]))
+    let mut m = Mat::<f64>::zeros(sl.len(), 1);
+    m.col_as_slice_mut(0).copy_from_slice(sl);
+    Ok(m)
 }
 
 impl RbDataFrame {
