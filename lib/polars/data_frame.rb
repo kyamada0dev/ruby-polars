@@ -886,7 +886,9 @@ module Polars
 
       out = _df.to_numo
       if out.nil?
-        Numo::NArray.vstack(width.times.map { |i| to_series(i).to_numo }).transpose
+        # Fallback (nulls / non-numeric): match the fast path by returning a
+        # C-contiguous array (transpose alone yields a non-contiguous view).
+        Numo::NArray.vstack(width.times.map { |i| to_series(i).to_numo }).transpose.dup
       else
         out
       end
