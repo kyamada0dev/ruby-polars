@@ -943,6 +943,26 @@ module Polars
       _from_rbdf(_df.pca(n_components))
     end
 
+    # Eigenvalues of a symmetric (self-adjoint) matrix via faer (pure Rust),
+    # in non-decreasing order (like numpy's `eigvalsh`). Only the lower triangle
+    # is referenced, so `self` is treated as symmetric and must be square.
+    # Intended for covariance / correlation matrices.
+    #
+    # @return [DataFrame] one column `eigenvalue`.
+    def eig_sym
+      _from_rbdf(_df.eig_sym)
+    end
+
+    # Cholesky factor `L` of `A = L Lᵀ` via faer (pure Rust). `self` must be
+    # symmetric positive definite (only the lower triangle is referenced) and
+    # square; raises otherwise. Returns the lower-triangular `L` with `self`'s
+    # column names.
+    #
+    # @return [DataFrame]
+    def cholesky
+      _from_rbdf(_df.cholesky)
+    end
+
     # no to_pandas
 
     # Select column as Series at index location.

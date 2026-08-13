@@ -2,6 +2,7 @@
 // Ruby にも Numo にも行列を出さず、DataFrame in -> 線形代数 -> DataFrame out。
 // faer は pure Rust(BLAS/LAPACK 不要)。
 use faer::Mat;
+use faer::Side;
 use faer::prelude::*; // SolveLstsq
 use polars::prelude::*;
 
@@ -181,6 +182,49 @@ impl RbDataFrame {
             })
             .collect();
         let result = DataFrame::new(nrows, cols).map_err(RbPolarsErr::from)?;
+        Ok(RbDataFrame::new(result))
+    }
+
+    /// 対称(自己随伴)行列の固有値を非減少順で返す(faer, 下三角を参照)。
+    /// 共分散・相関行列など対称行列を想定。`self` は正方でなければならない。
+    /// 1 列 `eigenvalue` の DataFrame を返す(numpy の `eigvalsh` と同じ昇順)。
+    pub fn eig_sym(&self) -> RbResult<Self> {
+        let df = self.df.read();
+        let a = df_to_faer_f64(&df).map_err(RbPolarsErr::from)?;
+        if a.nrows() != a.ncols() {
+            return Err(RbValueError::new_err(format!(
+                "eig_sym requires a square matrix, got {}x{}",
+                a.nrows(),
+                a.ncols()
+            )));
+        }
+        // 下三角のみ参照(対称と仮定)。固有値は非減少順で返る。
+        let vals = a.self_adjoint_eigenvalues(Side::Lower).map_err(faer_err)?;
+        let result = DataFrame::new(
+            vals.len(),
+            vec![Series::new("eigenvalue".into(), vals).into_column()],
+        )
+        .map_err(RbPolarsErr::from)?;
+        Ok(RbDataFrame::new(result))
+    }
+
+    /// Cholesky 分解 `A = L Lᵀ`(faer, 下三角)。`self` は対称正定値でなければならない
+    /// (下三角のみ参照)。下三角因子 L を入力と同じ列名の DataFrame として返す。
+    /// 正定値でない場合はエラー。
+    pub fn cholesky(&self) -> RbResult<Self> {
+        let df = self.df.read();
+        let a = df_to_faer_f64(&df).map_err(RbPolarsErr::from)?;
+        if a.nrows() != a.ncols() {
+            return Err(RbValueError::new_err(format!(
+                "cholesky requires a square matrix, got {}x{}",
+                a.nrows(),
+                a.ncols()
+            )));
+        }
+        let l = a.llt(Side::Lower).map_err(faer_err)?.L().to_owned();
+        let names = df.get_column_names_owned();
+        let result =
+            DataFrame::new(l.nrows(), faer_mat_to_columns(&l, &names)).map_err(RbPolarsErr::from)?;
         Ok(RbDataFrame::new(result))
     }
 }
