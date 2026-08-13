@@ -154,8 +154,10 @@ impl RbDataFrame {
 
     /// 主成分分析(PCA)。列を中心化して thin SVD し、上位 `n_components` 主成分への
     /// 射影(scores = U[:, :k] * S[:k])を `pc1..pck` の DataFrame として返す。
+    /// `scale` が真なら各列を標準偏差で割って標準化する(相関 PCA)。定数列は
+    /// 0 除算を避けてスケール 1 とする。
     /// (寄与率は返り値の各列の分散から Polars 側で算出できる。)
-    pub fn pca(&self, n_components: usize) -> RbResult<Self> {
+    pub fn pca(&self, n_components: usize, scale: bool) -> RbResult<Self> {
         let df = self.df.read();
         let a = df_to_faer_f64(&df).map_err(RbPolarsErr::from)?;
         let (nrows, ncols) = (a.nrows(), a.ncols());
@@ -167,7 +169,24 @@ impl RbDataFrame {
         let means: Vec<f64> = (0..ncols)
             .map(|j| (0..nrows).map(|i| a[(i, j)]).sum::<f64>() / nrows as f64)
             .collect();
-        let centered = Mat::from_fn(nrows, ncols, |i, j| a[(i, j)] - means[j]);
+        // scale 時は列ごとの標準偏差(母集団, ddof=0)で割る。std==0 の列は 1 に。
+        let inv_std: Vec<f64> = (0..ncols)
+            .map(|j| {
+                if !scale {
+                    return 1.0;
+                }
+                let var = (0..nrows)
+                    .map(|i| {
+                        let d = a[(i, j)] - means[j];
+                        d * d
+                    })
+                    .sum::<f64>()
+                    / nrows as f64;
+                let sd = var.sqrt();
+                if sd > 0.0 { 1.0 / sd } else { 1.0 }
+            })
+            .collect();
+        let centered = Mat::from_fn(nrows, ncols, |i, j| (a[(i, j)] - means[j]) * inv_std[j]);
 
         let svd = centered.thin_svd().map_err(faer_err)?;
         let u = svd.U();

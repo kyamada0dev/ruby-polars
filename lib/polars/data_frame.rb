@@ -932,15 +932,18 @@ module Polars
       _from_rbdf(_df.svd)
     end
 
-    # Principal component analysis via faer (pure Rust). Columns are centered,
-    # then projected onto the top `n_components` principal components; returns the
-    # scores as columns `pc1..pck`. Explained variance can be derived from each
-    # score column's variance in Polars.
+    # Principal component analysis via faer (pure Rust). Columns are centered
+    # (and, when `scale: true`, standardized to unit variance for correlation
+    # PCA), then projected onto the top `n_components` principal components;
+    # returns the scores as columns `pc1..pck`. Explained variance can be
+    # derived from each score column's variance in Polars.
     #
     # @param n_components [Integer]
+    # @param scale [Boolean] standardize each column by its standard deviation
+    #   before decomposition (correlation PCA). Constant columns are left as-is.
     # @return [DataFrame]
-    def pca(n_components)
-      _from_rbdf(_df.pca(n_components))
+    def pca(n_components, scale: false)
+      _from_rbdf(_df.pca(n_components, scale))
     end
 
     # Eigenvalues of a symmetric (self-adjoint) matrix via faer (pure Rust),
