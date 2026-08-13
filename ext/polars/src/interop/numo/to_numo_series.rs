@@ -17,6 +17,13 @@ impl RbSeries {
 
 /// Convert a Series to a Numo array.
 fn series_to_numo(rb: &Ruby, s: &Series) -> RbResult<Value> {
+    // temporal(Date/Datetime/Duration/Time)は物理表現へ: Date -> Int32(日数)、
+    // Datetime/Duration/Time -> Int64(その列の time_unit の epoch 整数)。
+    // numpy の datetime64-as-int64 と同様のセマンティクス。
+    if s.dtype().is_temporal() {
+        let phys = s.to_physical_repr();
+        return series_to_numo(rb, phys.as_ref());
+    }
     if let Some(v) = series_to_numo_fast(rb, s) {
         return Ok(v);
     }

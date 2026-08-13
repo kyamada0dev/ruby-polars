@@ -3112,6 +3112,11 @@ module Polars
 
     # Convert this Series to a Numo array. This operation clones data but is completely safe.
     #
+    # Temporal columns are returned as their physical integer epoch (like numpy's
+    # datetime64 viewed as int64): Date -> `Numo::Int32` (days since epoch),
+    # Datetime / Duration / Time -> `Numo::Int64` in the column's time unit
+    # (e.g. microseconds for `datetime[us]`).
+    #
     # @return [Numo::NArray]
     #
     # @example
@@ -3123,11 +3128,7 @@ module Polars
     def to_numo
       require "numo/narray"
 
-      if dtype.temporal?
-        Numo::RObject.cast(to_a)
-      else
-        _s.to_numo
-      end
+      _s.to_numo
     end
 
     # Return the underlying Arrow array.
