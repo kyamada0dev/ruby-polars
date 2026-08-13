@@ -7,6 +7,7 @@ gem "rake-compiler"
 gem "minitest"
 gem "activerecord"
 gem "numo-narray-alt"
+gem "numo-linalg-alt"
 gem "vega"
 gem "bigdecimal", require: false
 gem "pg", require: false
