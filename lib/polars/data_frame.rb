@@ -915,6 +915,34 @@ module Polars
       _from_rbdf(_df.lstsq(target.to_s))
     end
 
+    # Solve the square linear system `A x = B` via faer (pure Rust).
+    # `self` is `A` (n x n); `b` is `B` (n x k). Returns `X` (n x k) with `b`'s
+    # column names.
+    #
+    # @param b [DataFrame]
+    # @return [DataFrame]
+    def solve(b)
+      _from_rbdf(_df.solve(b._df))
+    end
+
+    # Singular values (the SVD's S), non-increasing, via faer (pure Rust).
+    #
+    # @return [DataFrame] one column `singular_value`.
+    def svd
+      _from_rbdf(_df.svd)
+    end
+
+    # Principal component analysis via faer (pure Rust). Columns are centered,
+    # then projected onto the top `n_components` principal components; returns the
+    # scores as columns `pc1..pck`. Explained variance can be derived from each
+    # score column's variance in Polars.
+    #
+    # @param n_components [Integer]
+    # @return [DataFrame]
+    def pca(n_components)
+      _from_rbdf(_df.pca(n_components))
+    end
+
     # no to_pandas
 
     # Select column as Series at index location.
