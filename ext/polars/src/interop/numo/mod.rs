@@ -4,7 +4,26 @@ pub mod to_numo_series;
 
 use magnus::rb_sys::AsRawValue;
 use magnus::{RClass, RModule, Ruby, Value, prelude::*};
+use polars_core::prelude::DataType;
 use rb_sys::StableApiDefinition;
+
+/// polars の固定幅数値 dtype に対応する Numo クラス名。対応外は None。
+pub(crate) fn numo_class_name(dt: &DataType) -> Option<&'static str> {
+    use DataType::*;
+    Some(match dt {
+        Float64 => "DFloat",
+        Float32 => "SFloat",
+        Int64 => "Int64",
+        Int32 => "Int32",
+        Int16 => "Int16",
+        Int8 => "Int8",
+        UInt64 => "UInt64",
+        UInt32 => "UInt32",
+        UInt16 => "UInt16",
+        UInt8 => "UInt8",
+        _ => return None,
+    })
+}
 
 // numo-narray-alt の narray.h と一致させた C 構造体レイアウト。
 //   narray_t     : ndim(u8) type(u8) flag[2] elmsz(u16) size shape* reduce  = 32B
