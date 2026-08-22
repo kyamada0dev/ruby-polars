@@ -3125,10 +3125,34 @@ module Polars
     #   # =>
     #   # Numo::Int64#shape=[3]
     #   # [1, 2, 3]
-    def to_numo
+    # Convert this Series to a Numo array.
+    #
+    # Nulls are handled by dtype (nulls in a null-free Series are ignored):
+    # - a float column fills nulls with `NaN` (numpy convention);
+    # - an integer column raises unless `null_value` is given (integers have no
+    #   NaN), so the loss of nulls is never silent;
+    # - `null_value` (any dtype) fills nulls with that value first.
+    # The value is filled in Polars (native), then the buffer is copied in a
+    # single memcpy — no per-element Ruby Object boxing.
+    #
+    # @param null_value [Object, nil] value to substitute for nulls
+    # @return [Numo::NArray]
+    def to_numo(null_value: nil)
       require "numo/narray"
 
-      _s.to_numo
+      s = self
+      if null_count > 0
+        if !null_value.nil?
+          s = fill_null(null_value)
+        elsif dtype.float?
+          s = fill_null(Float::NAN)
+        elsif dtype.integer?
+          raise ArgumentError,
+            "to_numo: #{name.inspect} (#{dtype}) has #{null_count} null(s); pass " \
+            "null_value:, or fill_null/drop_nulls, or cast to a float dtype first"
+        end
+      end
+      s._s.to_numo
     end
 
     # Return the underlying Arrow array.

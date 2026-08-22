@@ -881,14 +881,25 @@ module Polars
     #   )
     #   df.to_numo.class
     #   # => Numo::RObject
-    def to_numo
+    # Convert the DataFrame to a 2-D Numo array of shape `[height, width]`.
+    #
+    # Nulls are handled by dtype (see {Series#to_numo}): float columns fill nulls
+    # with `NaN`, integer columns raise unless `null_value` is given, and a
+    # `null_value` fills every column's nulls with that value. Filling happens in
+    # Polars (native) so the numeric fast path (single scatter into a row-major
+    # buffer) is used — no per-element Ruby Object boxing.
+    #
+    # @param null_value [Object, nil] value to substitute for nulls
+    # @return [Numo::NArray]
+    def to_numo(null_value: nil)
       require "numo/narray"
 
-      out = _df.to_numo
+      df = _frame_for_numo(null_value)
+      out = df._df.to_numo
       if out.nil?
-        # Fallback (nulls / non-numeric): match the fast path by returning a
+        # Fallback (non-numeric supertype): match the fast path by returning a
         # C-contiguous array (transpose alone yields a non-contiguous view).
-        Numo::NArray.vstack(width.times.map { |i| to_series(i).to_numo }).transpose.dup
+        Numo::NArray.vstack(df.width.times.map { |i| df.to_series(i).to_numo }).transpose.dup
       else
         out
       end
@@ -7436,6 +7447,30 @@ module Polars
         "\n\nHint: Use the `filter` method instead."
       )
       raise TypeError, msg
+    end
+
+    # Return a DataFrame with nulls handled for `to_numo` (see {#to_numo}).
+    # Float columns fill nulls with NaN; integer columns raise unless a
+    # `null_value` is given; a `null_value` fills every column. Filling is done
+    # in Polars so the native numeric fast path applies (no boxing).
+    def _frame_for_numo(null_value)
+      nullable = columns.select { |c| self[c].null_count > 0 }
+      return self if nullable.empty?
+      return fill_null(null_value) unless null_value.nil?
+
+      fills = []
+      nullable.each do |c|
+        dt = self[c].dtype
+        if dt.float?
+          fills << F.col(c).fill_null(Float::NAN)
+        elsif dt.integer?
+          raise ArgumentError,
+            "to_numo: column #{c.inspect} (#{dt}) has nulls; pass null_value:, " \
+            "or fill_null/drop_nulls, or cast to a float dtype first"
+        end
+        # non-numeric with nulls: left as-is (the fast path bails to the fallback)
+      end
+      fills.empty? ? self : with_columns(fills)
     end
   end
 end
