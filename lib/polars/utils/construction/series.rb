@@ -204,7 +204,11 @@ module Polars
     # dtypes for which the native fast path (RbSeries.from_numo_ptr) is safe:
     # fixed-width numeric with a 1:1 polars mapping and no null concept.
     # Matched by class name (as strings) so this file loads without Numo present.
-    FAST_NUMO_DTYPE_NAMES = %w[Numo::DFloat Numo::SFloat Numo::Int64 Numo::Int32].freeze
+    FAST_NUMO_DTYPE_NAMES = %w[
+      Numo::DFloat Numo::SFloat
+      Numo::Int64 Numo::Int32 Numo::Int16 Numo::Int8
+      Numo::UInt64 Numo::UInt32 Numo::UInt16 Numo::UInt8
+    ].freeze
 
     def self.numo_to_rbseries(name, values, strict: true, nan_to_null: false)
       if values.shape.length == 1
