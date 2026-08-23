@@ -12,7 +12,7 @@ module Polars
         elsif Utils.is_polars_dtype(name)
           dtypes = [name]
           dtypes.concat(more_names)
-          return Selector._by_type(dtypes).as_expr
+          return Selector._by_dtype(dtypes).as_expr
         else
           msg = "invalid input for `col`\n\nExpected `str` or `DataType`, got #{name.class.name}."
           raise TypeError, msg
