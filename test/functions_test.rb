@@ -25,6 +25,16 @@ class FunctionsTest < Minitest::Test
     assert_match "cannot create expression literal for value", error.message
   end
 
+  def test_col_by_dtype
+    df = Polars::DataFrame.new(
+      {"a" => [1, 2], "b" => [1.5, 2.5], "c" => ["x", "y"], "d" => [3, 4]}
+    )
+    # single dtype
+    assert_equal ["b"], df.select(Polars.col(Polars::Float64)).columns
+    # multiple dtypes select every matching column (regression: _by_dtype)
+    assert_equal %w[a b d], df.select(Polars.col(Polars::Float64, Polars::Int64)).columns
+  end
+
   def test_collect_all
     lf = Polars::LazyFrame.new({"a" => [1, 2, 3]})
     assert_frame ({"a" => [1, 2, 3]}), Polars.collect_all([lf])[0]
